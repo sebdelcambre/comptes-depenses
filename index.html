@@ -144,6 +144,14 @@ function load() {
       store[t] = raw ? JSON.parse(raw) : seeds[t]();
     } catch (e) { store[t] = seeds[t](); }
   }
+  // Item de test (une seule fois) pour valider le déploiement GitHub -> Netlify
+  try {
+    if (!localStorage.getItem("test-item-v1")) {
+      store.dettes[0].items.push({ id: uid(), label: "Test", amount: 0, paid: false });
+      localStorage.setItem("test-item-v1", "1");
+      save();
+    }
+  } catch (e) {}
   render();
 }
 
