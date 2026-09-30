@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Comptes Seb / Anaïs</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: #101418; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; padding: 20px 12px 60px; color: #E8ECF1; }
+  .wrap { max-width: 560px; margin: 0 auto; }
+  header { text-align: center; margin-bottom: 16px; }
+  .eyebrow { font-size: 11px; letter-spacing: .18em; text-transform: uppercase; color: #8A94A3; margin-bottom: 8px; }
+  .big-total { font-size: 38px; font-weight: 700; font-variant-numeric: tabular-nums; letter-spacing: -0.02em; }
+  .sub-line { font-size: 13px; color: #8A94A3; margin-top: 4px; }
+  .ghost-btn { margin-top: 12px; background: transparent; border: 1px solid #2A323E; color: #8A94A3; border-radius: 999px; padding: 6px 14px; font-size: 12px; cursor: pointer; }
+  .tabs { display: flex; gap: 6px; margin-bottom: 18px; background: #1A2028; border-radius: 12px; padding: 5px; }
+  .tab { flex: 1; background: transparent; border: none; color: #8A94A3; font-size: 13px; font-weight: 600; padding: 9px 0; border-radius: 8px; cursor: pointer; }
+  .tab.active { background: #2A323E; color: #E8ECF1; }
+  .card { position: relative; background: #1A2028; border-radius: 14px; padding: 14px 14px 10px 18px; margin-bottom: 14px; overflow: hidden; }
+  .cat-bar { position: absolute; left: 0; top: 0; bottom: 0; width: 4px; }
+  .cat-head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 8px; gap: 10px; }
+  .cat-name { font-size: 16px; font-weight: 700; }
+  .cat-note { font-size: 12px; font-weight: 400; color: #8A94A3; }
+  .cat-total { font-size: 16px; font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .cat-head-right { display: flex; align-items: center; gap: 10px; }
+  .progress { font-size: 12px; color: #8A94A3; font-variant-numeric: tabular-nums; }
+  .empty { font-size: 13px; color: #5B6675; padding: 8px 0 10px; }
+  .row { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-top: 1px solid #232B36; }
+  .check { width: 22px; height: 22px; min-width: 22px; border-radius: 7px; border: 1.5px solid #3A4453; background: transparent; color: #0F1319; font-size: 13px; font-weight: 800; display: flex; align-items: center; justify-content: center; cursor: pointer; }
+  .check.paid { background: #5FBF7A; border-color: #5FBF7A; }
+  .row-label { flex: 1; font-size: 14px; line-height: 1.3; min-width: 0; overflow-wrap: anywhere; color: #DDE3EA; cursor: pointer; }
+  .row-amount { font-size: 14px; font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; cursor: pointer; border-bottom: 1px dashed #3A4453; padding-bottom: 1px; }
+  .paid-text { text-decoration: line-through; color: #5B6675 !important; }
+  .trash { background: transparent; border: none; color: #5B6675; cursor: pointer; padding: 4px; display: flex; }
+  .add-row { width: 100%; background: transparent; border: none; border-top: 1px solid #232B36; color: #8A94A3; font-size: 13px; text-align: left; padding: 10px 0 6px; cursor: pointer; }
+  .add-form { display: flex; gap: 8px; padding: 10px 0 6px; border-top: 1px solid #232B36; }
+  input { background: #101418; border: 1px solid #2A323E; border-radius: 8px; color: #E8ECF1; padding: 8px 10px; font-size: 16px; min-width: 0; }
+  .inp-label { flex: 1; }
+  .inp-amount { width: 90px; }
+  .add-btn, .mini-btn { border: none; border-radius: 8px; font-weight: 700; font-size: 13px; padding: 8px 12px; cursor: pointer; }
+  .add-btn { color: #0F1319; padding: 8px 14px; }
+  .edit-panel { background: #131920; border: 1px solid #232B36; border-radius: 10px; padding: 10px; margin: 4px 0 10px; }
+  .edit-line { display: flex; gap: 8px; margin-bottom: 8px; flex-wrap: wrap; }
+  .edit-line:last-child { margin-bottom: 0; }
+  .btn-sub { background: #E8503A; color: #fff; }
+  .btn-add2 { background: #5FBF7A; color: #0F1319; }
+  .btn-save { background: #2F7FD6; color: #fff; }
+  .btn-move, .btn-cancel { background: transparent; color: #8A94A3; border: 1px solid #2A323E; }
+  .edit-hint { font-size: 11px; color: #5B6675; width: 100%; line-height: 1.4; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="eyebrow">Compte Seb / Anaïs</div>
+    <div class="big-total" id="bigTotal">—</div>
+    <div class="sub-line" id="subLine"></div>
+    <button class="ghost-btn" id="togglePaidBtn" onclick="toggleShowPaid()" style="display:none">Masquer les payés</button>
+  </header>
+  <div class="tabs">
+    <button class="tab active" id="tab-dettes" onclick="switchTab('dettes')">Dettes</button>
+    <button class="tab" id="tab-paye" onclick="switchTab('paye')">Par paye</button>
+    <button class="tab" id="tab-epargne" onclick="switchTab('epargne')">Épargne</button>
+  </div>
+  <div id="content"><div class="empty" style="text-align:center;padding:40px 0">Chargement…</div></div>
+</div>
+
+<script>
+const KEYS = { dettes: "comptes-seb-anais-v1", paye: "paye-seb-anais-v1", epargne: "epargne-seb-anais-v1" };
+const uid = () => Math.random().toString(36).slice(2, 10);
+let store = { dettes: null, paye: null, epargne: null };
+let tab = "dettes";
+let showPaid = true;
+let addingIn = null;
+let editingItem = null;
+let saveTimer = null;
+
+const seeds = {
+  dettes: () => [
+    { id: "bnc", name: "BNC", note: "points crédit +/- le 10", color: "#E8503A", items: [] },
+    { id: "cibc", name: "CIBC", note: "", color: "#B3273E", items: [
+      { id: uid(), label: "Myrtle Beach", amount: 858.08, paid: false }
+    ]},
+    { id: "amex", name: "Amex", note: "", color: "#2F7FD6", items: [
+      { id: uid(), label: "Sz", amount: 144.43, paid: false },
+      { id: uid(), label: "Claude", amount: 270, paid: false }
+    ]},
+    { id: "marge", name: "Marge", note: "", color: "#E3A72F", items: [
+      ["Voiture Italie", 467.71], ["French bee", 700], ["Impôt Seb", 911],
+      ["Robot aspirateur (Seb et Anaïs)", 1086.64], ["Électricien borne Tesla", 1178],
+      ["Happy", 1820], ["???", 1882.53], ["Air Transat", 3040],
+      ["Disney", 1100], ["Leclerc", 300], ["Carrefour", 190], ["Taxi", 200],
+      ["Cartes BNC", 200], ["Oy", 200], ["Huttopia", 300], ["Pony", 174.03],
+      ["Tesla acompte", 250], ["Tesla borne (600$ gouv / 174,43$ nous)", 873.81],
+      ["Best Pizza East", 56.02], ["Shake Shack", 51.89], ["Denny's", 75.58],
+      ["Dunkin", 29.70], ["Hey I am Yogost", 14.26], ["Poor East", 25.63],
+      ["Eatalia Joy", 18.61], ["Dunkin", 43.81], ["Trader Joe's", 87.59],
+      ["Walgreens", 18.09], ["Nuts Factory", 21.20], ["Dbuk Dabang", 27.13],
+      ["The Game Room", 32.53], ["Primark", 155.29], ["Americandream.com", 93.20],
+      ["Cardvault", 58.74], ["Altar'd State", 257.01], ["002 American Dream", 46.76],
+      ["Nuts Factory", 21.29], ["Shake Shack", 44.83], ["Dreamworks Concessions", 30.75],
+      ["IHOP", 69.03], ["Target", 17.01], ["Walmart", 131.34],
+      ["Lakegeorgeteamboatco", 89.46], ["Dunkin", 32.31], ["KFC", 71.30],
+      ["Target", 49.79], ["Marthas Dandee Cream", 26.06], ["7 Brew Coffee", 17.69],
+      ["Huttopia", 6.70], ["Gordons Country", 9.73], ["Bear's Cup", 78.65],
+      ["Schroon Lake Depar", 16.48], ["Milee Coffee Comp", 23.62]
+    ].map(([label, amount]) => ({ id: uid(), label, amount, paid: false })) }
+  ],
+  paye: () => [
+    { id: "anais", name: "Anaïs", note: "déduire au moment de la paie", color: "#C77DBE", items: [
+      ["Taxe scolaire", 10], ["Voiture entretien", 10], ["Immatriculation", 10],
+      ["Compte Nala", 10], ["Vacance Mexique", 20], ["Costco Myrtle Beach", 25],
+      ["Marge", 140], ["Karaté", 10], ["Garderie", 20], ["Borne Tesla", 10],
+      ["Claude (Amex)", 10]
+    ].map(([label, amount]) => ({ id: uid(), label, amount, paid: false })) },
+    { id: "seb", name: "Seb", note: "déduire au moment de la paie", color: "#4FA3A5", items: [
+      ["Taxe scolaire", 10], ["Voiture entretien", 10], ["Immatriculation", 10],
+      ["Compte Nala", 10], ["Vacance Mexique", 20], ["Impôt", 115],
+      ["Costco Myrtle Beach", 25], ["Marge", 160], ["Karaté", 10], ["EVG", 75],
+      ["Garderie", 20], ["Sezane (Amex)", 30], ["Borne Tesla", 10]
+    ].map(([label, amount]) => ({ id: uid(), label, amount, paid: false })) }
+  ],
+  epargne: () => [
+    { id: "epargne", name: "Compte épargne", note: "", color: "#5FBF7A", items: [
+      ["Happy & Nala", 40], ["École Ethan", 600.17], ["Garderie Sasha", 1017.92],
+      ["Compte Ethan", 0], ["Compte Sasha", 3], ["Dentiste", 188.54],
+      ["Taxes municipales", 628.82], ["Taxes scolaire", 20], ["Entretien voiture", 50],
+      ["Immatriculation (400$ / avril 2027)", 264.14], ["Vacances Mexique", 690],
+      ["Sous pour impôt Anaïs", 265], ["Impôt Seb à payer", 115], ["Karaté", 0],
+      ["Piscine Sasha", 46], ["GTA", 30], ["Accessoires Tesla", 0],
+      ["Électricité Tesla (pour septembre 2027)", 5], ["Prêt Tesla", 560],
+      ["Abonnement connectivité premium", 10], ["FSD Tesla", 56], ["Pneus Tesla (CIBC)", 78]
+    ].map(([label, amount]) => ({ id: uid(), label, amount, paid: false })) }
+  ]
+};
+
+const fmt = n => new Intl.NumberFormat("fr-CA", { style: "currency", currency: "CAD", minimumFractionDigits: 2 }).format(n);
+const esc = s => String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
+
+function load() {
+  for (const t of Object.keys(KEYS)) {
+    try {
+      const raw = localStorage.getItem(KEYS[t]);
+      store[t] = raw ? JSON.parse(raw) : seeds[t]();
+    } catch (e) { store[t] = seeds[t](); }
+  }
+  render();
+}
+
+function save() {
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(() => {
+    try {
+      for (const t of Object.keys(KEYS)) localStorage.setItem(KEYS[t], JSON.stringify(store[t]));
+    } catch (e) { console.error("Sauvegarde échouée", e); }
+  }, 300);
+}
+
+const data = () => store[tab];
+
+function switchTab(t) { tab = t; addingIn = null; editingItem = null; render(); }
+
+function togglePaid(catId, itemId) {
+  const it = data().find(c => c.id === catId).items.find(i => i.id === itemId);
+  it.paid = !it.paid;
+  save(); render();
+}
+
+function deleteItem(catId, itemId) {
+  const c = data().find(c => c.id === catId);
+  c.items = c.items.filter(i => i.id !== itemId);
+  if (editingItem === catId + "|" + itemId) editingItem = null;
+  save(); render();
+}
+
+function startAdd(catId) { addingIn = catId; editingItem = null; render();
+  const el = document.getElementById("inp-label-" + catId);
+  if (el) el.focus();
+}
+
+function submitAdd(catId) {
+  const label = document.getElementById("inp-label-" + catId).value.trim();
+  const raw = document.getElementById("inp-amount-" + catId).value;
+  const val = parseFloat(String(raw).replace(",", ".").replace(/[^0-9.\-]/g, ""));
+  if (!label || isNaN(val)) return;
+  data().find(c => c.id === catId).items.push({ id: uid(), label, amount: val, paid: false });
+  addingIn = null;
+  save(); render();
+}
+
+function startEdit(catId, itemId) {
+  editingItem = (editingItem === catId + "|" + itemId) ? null : catId + "|" + itemId;
+  addingIn = null;
+  render();
+}
+
+function cancelEdit() { editingItem = null; render(); }
+
+function readEdit(itemId) {
+  const label = document.getElementById("edit-label-" + itemId).value.trim();
+  const raw = document.getElementById("edit-amt-" + itemId).value;
+  const val = parseFloat(String(raw).replace(",", ".").replace(/[^0-9.\-]/g, ""));
+  return { label, val };
+}
+
+function applyEdit(catId, itemId, mode) {
+  const it = data().find(c => c.id === catId).items.find(i => i.id === itemId);
+  const { label, val } = readEdit(itemId);
+  if (label) it.label = label;
+  if (!isNaN(val) && val >= 0) {
+    if (mode === "sub") {
+      const reste = Math.round((it.amount - val) * 100) / 100;
+      if (reste <= 0) { it.paid = true; it.amount = Math.max(0, reste + val); }
+      else it.amount = reste;
+    } else if (mode === "add") {
+      it.amount = Math.round((it.amount + val) * 100) / 100;
+    } else {
+      it.amount = Math.round(val * 100) / 100;
+    }
+  }
+  editingItem = null;
+  save(); render();
+}
+
+function moveItem(catId, itemId, dir) {
+  const items = data().find(c => c.id === catId).items;
+  const idx = items.findIndex(i => i.id === itemId);
+  const to = idx + dir;
+  if (to < 0 || to >= items.length) return;
+  [items[idx], items[to]] = [items[to], items[idx]];
+  save(); render();
+}
+
+function resetPerson(catId) {
+  store.paye.find(c => c.id === catId).items.forEach(i => i.paid = false);
+  save(); render();
+}
+
+function toggleShowPaid() { showPaid = !showPaid; render(); }
+
+const trashSvg = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 6h18M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2m3 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M10 11v6M14 11v6"/></svg>';
+
+function render() {
+  for (const t of ["dettes", "paye", "epargne"])
+    document.getElementById("tab-" + t).className = "tab" + (tab === t ? " active" : "");
+  const toggleBtn = document.getElementById("togglePaidBtn");
+  const big = document.getElementById("bigTotal");
+  const sub = document.getElementById("subLine");
+
+  if (tab === "dettes") {
+    const totalDue = store.dettes.reduce((s,c) => s + c.items.filter(i=>!i.paid).reduce((t,i)=>t+i.amount,0), 0);
+    const totalPaid = store.dettes.reduce((s,c) => s + c.items.filter(i=>i.paid).reduce((t,i)=>t+i.amount,0), 0);
+    big.textContent = fmt(totalDue);
+    sub.textContent = "reste à payer" + (totalPaid > 0 ? " · " + fmt(totalPaid) + " remboursé" : "");
+    toggleBtn.style.display = "";
+    toggleBtn.textContent = showPaid ? "Masquer les payés" : "Afficher les payés";
+  } else if (tab === "paye") {
+    const totA = store.paye.find(c=>c.id==="anais").items.reduce((t,i)=>t+i.amount,0);
+    const totS = store.paye.find(c=>c.id==="seb").items.reduce((t,i)=>t+i.amount,0);
+    big.textContent = fmt(totA + totS);
+    sub.textContent = "par paye · Anaïs " + fmt(totA) + " · Seb " + fmt(totS);
+    toggleBtn.style.display = "none";
+  } else {
+    const tot = store.epargne.reduce((s,c) => s + c.items.filter(i=>!i.paid).reduce((t,i)=>t+i.amount,0), 0);
+    big.textContent = fmt(tot);
+    sub.textContent = "total en épargne";
+    toggleBtn.style.display = "none";
+  }
+
+  document.getElementById("content").innerHTML = data().map(cat => catCard(cat)).join("");
+}
+
+function catCard(cat) {
+  const isPaye = tab === "paye";
+  const due = cat.items.filter(i=>!i.paid).reduce((t,i)=>t+i.amount,0);
+  const total = cat.items.reduce((t,i)=>t+i.amount,0);
+  const doneCount = cat.items.filter(i=>i.paid).length;
+  const visible = (isPaye || tab === "epargne" || showPaid) ? cat.items : cat.items.filter(i=>!i.paid);
+  const subLabel = tab === "epargne" ? "− Retirer" : "− Payer";
+  const addLabel = tab === "epargne" ? "+ Déposer" : "+ Ajouter au solde";
+  return `<section class="card">
+    <div class="cat-bar" style="background:${cat.color}"></div>
+    <div class="cat-head">
+      <div class="cat-name">${esc(cat.name)}${cat.note ? `<span class="cat-note"> — ${esc(cat.note)}</span>` : ""}</div>
+      <div class="cat-head-right">
+        ${isPaye
+          ? `<span class="progress">${doneCount}/${cat.items.length}</span>
+             <div class="cat-total" style="color:${doneCount === cat.items.length && cat.items.length > 0 ? "#5FBF7A" : "#E8ECF1"}">${fmt(total)}</div>`
+          : `<div class="cat-total" style="color:${due > 0 ? "#E8ECF1" : "#5FBF7A"}">${fmt(due)}</div>`}
+      </div>
+    </div>
+    ${visible.length === 0 ? '<div class="empty">Rien ici 🎉</div>' : ""}
+    ${visible.map(item => `
+      <div class="row">
+        <button class="check ${item.paid ? "paid" : ""}" onclick="togglePaid('${cat.id}','${item.id}')">${item.paid ? "✓" : ""}</button>
+        <span class="row-label ${item.paid ? "paid-text" : ""}" onclick="startEdit('${cat.id}','${item.id}')">${esc(item.label)}</span>
+        <span class="row-amount ${item.paid ? "paid-text" : ""}" onclick="startEdit('${cat.id}','${item.id}')">${fmt(item.amount)}</span>
+        <button class="trash" onclick="deleteItem('${cat.id}','${item.id}')">${trashSvg}</button>
+      </div>
+      ${editingItem === cat.id + "|" + item.id ? `
+      <div class="edit-panel">
+        <div class="edit-line">
+          <input id="edit-label-${item.id}" style="flex:1" value="${esc(item.label)}" placeholder="Description">
+        </div>
+        <div class="edit-line">
+          <input id="edit-amt-${item.id}" class="inp-amount" inputmode="decimal" placeholder="0,00">
+          <button class="mini-btn btn-sub" onclick="applyEdit('${cat.id}','${item.id}','sub')">${subLabel}</button>
+          <button class="mini-btn btn-add2" onclick="applyEdit('${cat.id}','${item.id}','add')">${addLabel}</button>
+        </div>
+        <div class="edit-line">
+          <button class="mini-btn btn-save" onclick="applyEdit('${cat.id}','${item.id}','set')">Enregistrer</button>
+          <button class="mini-btn btn-move" onclick="moveItem('${cat.id}','${item.id}',-1)">↑ Monter</button>
+          <button class="mini-btn btn-move" onclick="moveItem('${cat.id}','${item.id}',1)">↓ Descendre</button>
+          <button class="mini-btn btn-cancel" onclick="cancelEdit()">✕</button>
+        </div>
+        <div class="edit-line"><span class="edit-hint">Entre un montant puis « ${subLabel} » / « ${addLabel} » pour ajuster le solde, ou « Enregistrer » pour remplacer le texte et le montant.</span></div>
+      </div>` : ""}`).join("")}
+    ${addingIn === cat.id
+      ? `<div class="add-form">
+           <input class="inp-label" id="inp-label-${cat.id}" placeholder="Description">
+           <input class="inp-amount" id="inp-amount-${cat.id}" inputmode="decimal" placeholder="0,00" onkeydown="if(event.key==='Enter')submitAdd('${cat.id}')">
+           <button class="add-btn" style="background:${cat.color}" onclick="submitAdd('${cat.id}')">OK</button>
+         </div>`
+      : `<button class="add-row" onclick="startAdd('${cat.id}')">+ Ajouter</button>`}
+    ${isPaye ? `<button class="add-row" style="border-top:none;padding-top:2px;color:#5B6675" onclick="resetPerson('${cat.id}')">↺ Nouvelle paye (tout décocher)</button>` : ""}
+  </section>`;
+}
+
+load();
+</script>
+</body>
+</html>
