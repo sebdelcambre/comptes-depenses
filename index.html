@@ -54,6 +54,8 @@
   .histo-date { font-size: 11px; color: #5B6675; margin-top: 2px; }
   .undo-btn { background: #2A323E; border: none; color: #E8ECF1; border-radius: 8px; padding: 7px 12px; font-size: 12px; font-weight: 700; cursor: pointer; white-space: nowrap; }
   .undo-btn:disabled { opacity: .4; cursor: default; }
+  .backup-row { display: flex; gap: 8px; justify-content: center; margin-top: 8px; }
+  .backup-note { font-size: 11px; color: #5B6675; text-align: center; margin-top: 6px; }
 </style>
 </head>
 <body>
@@ -64,6 +66,12 @@
     <div class="sub-line" id="subLine"></div>
     <button class="ghost-btn" id="togglePaidBtn" onclick="toggleShowPaid()" style="display:none">Masquer les payés</button>
     <button class="ghost-btn" id="histoBtn" onclick="toggleHisto()">Historique</button>
+    <div class="backup-row">
+      <button class="ghost-btn" style="margin-top:0" onclick="exportBackup()">⬇ Exporter</button>
+      <button class="ghost-btn" style="margin-top:0" onclick="document.getElementById('importFile').click()">⬆ Importer</button>
+      <input type="file" id="importFile" accept=".json,application/json" style="display:none" onchange="importBackup(event)">
+    </div>
+    <div class="backup-note" id="backupNote"></div>
   </header>
   <div class="tabs">
     <button class="tab active" id="tab-dettes" onclick="switchTab('dettes')">Dettes</button>
@@ -270,6 +278,51 @@ function undoHisto(hid) {
 }
 
 function toggleHisto() { showHisto = !showHisto; render(); }
+
+function exportBackup() {
+  const payload = {
+    app: "comptes-seb-anais", version: 1, exportedAt: new Date().toISOString(),
+    dettes: store.dettes, paye: store.paye, epargne: store.epargne, histo: histo
+  };
+  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+  const a = document.createElement("a");
+  const d = new Date();
+  const stamp = d.getFullYear() + "-" + String(d.getMonth()+1).padStart(2,"0") + "-" + String(d.getDate()).padStart(2,"0");
+  a.href = URL.createObjectURL(blob);
+  a.download = "comptes-sauvegarde-" + stamp + ".json";
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+  const note = document.getElementById("backupNote");
+  note.textContent = "Sauvegarde téléchargée — garde le fichier dans Fichiers ou iCloud.";
+  setTimeout(() => { note.textContent = ""; }, 6000);
+}
+
+function importBackup(ev) {
+  const file = ev.target.files && ev.target.files[0];
+  ev.target.value = "";
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    const note = document.getElementById("backupNote");
+    try {
+      const p = JSON.parse(reader.result);
+      if (p.app !== "comptes-seb-anais" || !Array.isArray(p.dettes) || !Array.isArray(p.paye) || !Array.isArray(p.epargne))
+        throw new Error("format");
+      if (!confirm("Remplacer les données actuelles par cette sauvegarde" + (p.exportedAt ? " du " + new Date(p.exportedAt).toLocaleDateString("fr-CA") : "") + " ?")) return;
+      store.dettes = p.dettes; store.paye = p.paye; store.epargne = p.epargne;
+      histo = Array.isArray(p.histo) ? p.histo : [];
+      save(); render();
+      note.textContent = "Sauvegarde restaurée ✓";
+      setTimeout(() => { note.textContent = ""; }, 6000);
+    } catch (e) {
+      note.textContent = "Ce fichier n'est pas une sauvegarde valide de l'app.";
+      setTimeout(() => { note.textContent = ""; }, 6000);
+    }
+  };
+  reader.readAsText(file);
+}
 
 function moveItem(catId, itemId, dir) {
   const items = data().find(c => c.id === catId).items;
