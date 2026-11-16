@@ -56,6 +56,11 @@
   .undo-btn:disabled { opacity: .4; cursor: default; }
   .backup-row { display: flex; gap: 8px; justify-content: center; margin-top: 8px; }
   .backup-note { font-size: 11px; color: #5B6675; text-align: center; margin-top: 6px; }
+  .chip { background: #101418; border: 1px solid #2A323E; color: #8A94A3; border-radius: 999px; padding: 6px 12px; font-size: 12px; cursor: pointer; }
+  .chip-on { background: #E3A72F; border-color: #E3A72F; color: #0F1319; font-weight: 700; }
+  .group-head { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; padding: 10px 0 4px; border-top: 1px solid #232B36; }
+  .group-name { font-size: 11px; font-weight: 700; color: #E3A72F; letter-spacing: .06em; text-transform: uppercase; }
+  .group-sub { font-size: 12px; color: #8A94A3; font-variant-numeric: tabular-nums; white-space: nowrap; }
 </style>
 </head>
 <body>
@@ -279,6 +284,59 @@ function undoHisto(hid) {
 
 function toggleHisto() { showHisto = !showHisto; render(); }
 
+function payeGroups() {
+  const g = [];
+  store.dettes.forEach(c => c.items.forEach(i => {
+    if (i.payeGroup && !g.includes(i.payeGroup)) g.push(i.payeGroup);
+  }));
+  return g;
+}
+
+function setPayeGroupByIdx(catId, itemId, idx) {
+  const it = store.dettes.find(c => c.id === catId).items.find(i => i.id === itemId);
+  const g = payeGroups()[idx];
+  it.payeGroup = (it.payeGroup === g) ? null : g;
+  save(); render();
+}
+
+function newPayeGroup(catId, itemId) {
+  const inp = document.getElementById("paye-new-" + itemId);
+  const name = inp && inp.value.trim();
+  if (!name) return;
+  const it = store.dettes.find(c => c.id === catId).items.find(i => i.id === itemId);
+  it.payeGroup = name;
+  save(); render();
+}
+
+function dissolvePayeByIdx(idx) {
+  const g = payeGroups()[idx];
+  if (!g) return;
+  if (!confirm("Terminer « " + g + " » ? Les items restent dans leurs catégories, seule l\'étiquette de paye est retirée.")) return;
+  store.dettes.forEach(c => c.items.forEach(i => { if (i.payeGroup === g) i.payeGroup = null; }));
+  save(); render();
+}
+
+function payeSummaryCard() {
+  const groups = payeGroups();
+  if (!groups.length) return "";
+  const rows = groups.map((g, gi) => {
+    let tot = 0, n = 0;
+    store.dettes.forEach(c => c.items.forEach(i => {
+      if (i.payeGroup === g && !i.paid) { tot += i.amount; n++; }
+    }));
+    return '<div class="histo-row">' +
+      '<div class="histo-main">' +
+        '<div class="histo-label">' + esc(g) + '</div>' +
+        '<div class="histo-detail">' + n + ' item' + (n > 1 ? 's' : '') + ' à payer</div>' +
+      '</div>' +
+      '<span class="row-amount" style="border:none;cursor:default">' + fmt(tot) + '</span>' +
+      '<button class="trash" title="Terminer cette paye" onclick="dissolvePayeByIdx(' + gi + ')">✕</button>' +
+    '</div>';
+  }).join("");
+  return '<section class="card"><div class="cat-bar" style="background:#E3A72F"></div>' +
+    '<div class="cat-head"><div class="cat-name">📅 Prochaines payes</div></div>' + rows + '</section>';
+}
+
 function exportBackup() {
   const payload = {
     app: "comptes-seb-anais", version: 1, exportedAt: new Date().toISOString(),
@@ -373,7 +431,8 @@ function render() {
   if (showHisto) {
     document.getElementById("content").innerHTML = histoPanel();
   } else {
-    document.getElementById("content").innerHTML = data().map(cat => catCard(cat)).join("");
+    document.getElementById("content").innerHTML =
+      (tab === "dettes" ? payeSummaryCard() : "") + data().map(cat => catCard(cat)).join("");
   }
 }
 
@@ -434,7 +493,21 @@ function catCard(cat) {
       </div>
     </div>
     ${visible.length === 0 ? '<div class="empty">Rien ici 🎉</div>' : ""}
-    ${visible.map(item => `
+    ${(tab === "dettes" ? (() => {
+      const groups = [];
+      visible.forEach(i => { if (i.payeGroup && !groups.includes(i.payeGroup)) groups.push(i.payeGroup); });
+      const entries = [];
+      groups.forEach(g => {
+        const its = visible.filter(i => i.payeGroup === g);
+        const sub = its.filter(i => !i.paid).reduce((t, i) => t + i.amount, 0);
+        entries.push({ h: g, sub });
+        its.forEach(i => entries.push({ it: i }));
+      });
+      visible.filter(i => !i.payeGroup).forEach(i => entries.push({ it: i }));
+      return entries;
+    })() : visible.map(i => ({ it: i }))).map(entry => entry.h !== undefined
+      ? `<div class="group-head"><span class="group-name">📅 ${esc(entry.h)}</span><span class="group-sub">${fmt(entry.sub)}</span></div>`
+      : (item => `
       <div class="row">
         <button class="check ${item.paid ? "paid" : ""}" onclick="togglePaid('${cat.id}','${item.id}')">${item.paid ? "✓" : ""}</button>
         <span class="row-label ${item.paid ? "paid-text" : ""}" onclick="startEdit('${cat.id}','${item.id}')">${esc(item.label)}</span>
@@ -457,8 +530,17 @@ function catCard(cat) {
           <button class="mini-btn btn-move" onclick="moveItem('${cat.id}','${item.id}',1)">↓ Descendre</button>
           <button class="mini-btn btn-cancel" onclick="cancelEdit()">✕</button>
         </div>
-        <div class="edit-line"><span class="edit-hint">Entre un montant puis « ${subLabel} » / « ${addLabel} » pour ajuster le solde, ou « Enregistrer » pour remplacer le texte et le montant.</span></div>
-      </div>` : ""}`).join("")}
+        ${tab === "dettes" ? `
+        <div class="edit-line" style="align-items:center">
+          <span class="edit-hint" style="width:auto">Payer à :</span>
+          ${payeGroups().map((g, gi) => `<button class="chip ${item.payeGroup === g ? "chip-on" : ""}" onclick="setPayeGroupByIdx('${cat.id}','${item.id}',${gi})">${esc(g)}</button>`).join("")}
+        </div>
+        <div class="edit-line">
+          <input id="paye-new-${item.id}" style="flex:1" placeholder="Nouvelle paye (ex. Paye du 20 nov)" onkeydown="if(event.key==='Enter')newPayeGroup('${cat.id}','${item.id}')">
+          <button class="mini-btn btn-set" onclick="newPayeGroup('${cat.id}','${item.id}')">OK</button>
+        </div>` : ""}
+        <div class="edit-line"><span class="edit-hint">Entre un montant puis « ${subLabel} » / « ${addLabel} » pour ajuster le solde, ou « Enregistrer » pour remplacer le texte et le montant.${tab === "dettes" ? " Touche une étiquette de paye pour assigner ou retirer l'item." : ""}</span></div>
+      </div>` : ""}`)(entry.it)).join("")}
     ${addingIn === cat.id
       ? `<div class="add-form">
            <input class="inp-label" id="inp-label-${cat.id}" placeholder="Description">
