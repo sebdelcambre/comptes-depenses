@@ -293,18 +293,25 @@ function startAddDate(catId) { addingDateIn = catId; addingIn = null; editingIte
   if (el) el.focus();
 }
 
+function payeLabel(iso) {
+  const d = new Date(iso + "T12:00:00");
+  return "Paye du " + d.toLocaleDateString("fr-CA", { day: "numeric", month: "short", year: "numeric" });
+}
+
 function submitAddDate(catId) {
-  const label = document.getElementById("inp-date-" + catId).value.trim();
-  if (!label) return;
-  store.dettes.find(c => c.id === catId).items.push({ id: uid(), header: true, label });
+  const iso = document.getElementById("inp-date-" + catId).value;
+  if (!iso) return;
+  store.dettes.find(c => c.id === catId).items.push({ id: uid(), header: true, label: payeLabel(iso), date: iso });
   addingDateIn = null;
   save(); render();
 }
 
 function saveHeader(catId, itemId) {
-  const label = document.getElementById("edit-label-" + itemId).value.trim();
-  if (!label) return;
-  store.dettes.find(c => c.id === catId).items.find(i => i.id === itemId).label = label;
+  const iso = document.getElementById("edit-date-" + itemId).value;
+  if (!iso) return;
+  const it = store.dettes.find(c => c.id === catId).items.find(i => i.id === itemId);
+  it.label = payeLabel(iso);
+  it.date = iso;
   editingItem = null;
   save(); render();
 }
@@ -534,7 +541,7 @@ function catCard(cat) {
       ${editingItem === cat.id + "|" + item.id ? `
       <div class="edit-panel">
         <div class="edit-line">
-          <input id="edit-label-${item.id}" style="flex:1" value="${esc(item.label)}" onkeydown="if(event.key==='Enter')saveHeader('${cat.id}','${item.id}')">
+          <input type="date" id="edit-date-${item.id}" style="flex:1" value="${item.date || ""}" onkeydown="if(event.key==='Enter')saveHeader('${cat.id}','${item.id}')">
           <button class="mini-btn btn-save" onclick="saveHeader('${cat.id}','${item.id}')">Enregistrer</button>
           <button class="mini-btn btn-cancel" onclick="cancelEdit()">✕</button>
         </div>
@@ -574,7 +581,7 @@ function catCard(cat) {
       : `<button class="add-row" onclick="startAdd('${cat.id}')">+ Ajouter</button>`}
     ${isDettes ? (addingDateIn === cat.id
       ? `<div class="add-form" style="border-top:none;padding-top:2px">
-           <input class="inp-label" id="inp-date-${cat.id}" placeholder="Paye du … (ex. 20 nov)" onkeydown="if(event.key==='Enter')submitAddDate('${cat.id}')">
+           <input class="inp-label" type="date" id="inp-date-${cat.id}" onkeydown="if(event.key==='Enter')submitAddDate('${cat.id}')">
            <button class="add-btn" style="background:#E3A72F" onclick="submitAddDate('${cat.id}')">OK</button>
          </div>`
       : `<button class="add-row" style="border-top:none;padding-top:2px;color:#5B6675" onclick="startAddDate('${cat.id}')">📅 + Ajouter une paye</button>`) : ""}
