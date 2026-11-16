@@ -56,11 +56,13 @@
   .undo-btn:disabled { opacity: .4; cursor: default; }
   .backup-row { display: flex; gap: 8px; justify-content: center; margin-top: 8px; }
   .backup-note { font-size: 11px; color: #5B6675; text-align: center; margin-top: 6px; }
-  .chip { background: #101418; border: 1px solid #2A323E; color: #8A94A3; border-radius: 999px; padding: 6px 12px; font-size: 12px; cursor: pointer; }
-  .chip-on { background: #E3A72F; border-color: #E3A72F; color: #0F1319; font-weight: 700; }
-  .group-head { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; padding: 10px 0 4px; border-top: 1px solid #232B36; }
-  .group-name { font-size: 11px; font-weight: 700; color: #E3A72F; letter-spacing: .06em; text-transform: uppercase; }
-  .group-sub { font-size: 12px; color: #8A94A3; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .drag-handle { color: #5B6675; padding: 4px 2px; touch-action: none; cursor: grab; display: flex; }
+  .row.dragging { opacity: .35; }
+  .drop-above { box-shadow: 0 -2px 0 #2F7FD6; }
+  .drop-end { box-shadow: 0 2px 0 #2F7FD6; }
+  .header-row { display: flex; align-items: center; gap: 10px; padding: 12px 0 5px; border-top: 1px solid #232B36; }
+  .header-name { flex: 1; font-size: 12px; font-weight: 800; color: #E3A72F; letter-spacing: .06em; text-transform: uppercase; cursor: pointer; min-width: 0; overflow-wrap: anywhere; }
+  .header-sub { font-size: 12px; color: #8A94A3; font-variant-numeric: tabular-nums; white-space: nowrap; }
 </style>
 </head>
 <body>
@@ -187,7 +189,7 @@ function save() {
 
 const data = () => store[tab];
 
-function switchTab(t) { tab = t; addingIn = null; editingItem = null; render(); }
+function switchTab(t) { tab = t; addingIn = null; editingItem = null; addingDateIn = null; render(); }
 
 function togglePaid(catId, itemId) {
   const it = data().find(c => c.id === catId).items.find(i => i.id === itemId);
@@ -198,14 +200,14 @@ function togglePaid(catId, itemId) {
 function deleteItem(catId, itemId) {
   const c = data().find(c => c.id === catId);
   const it = c.items.find(i => i.id === itemId);
-  if (it) logHisto({ action: "delete", tab, catId, catName: c.name, itemId,
+  if (it && !it.header) logHisto({ action: "delete", tab, catId, catName: c.name, itemId,
     label: it.label, before: { label: it.label, amount: it.amount, paid: it.paid }, after: null, entered: null });
   c.items = c.items.filter(i => i.id !== itemId);
   if (editingItem === catId + "|" + itemId) editingItem = null;
   save(); render();
 }
 
-function startAdd(catId) { addingIn = catId; editingItem = null; render();
+function startAdd(catId) { addingIn = catId; editingItem = null; addingDateIn = null; render();
   const el = document.getElementById("inp-label-" + catId);
   if (el) el.focus();
 }
@@ -284,57 +286,75 @@ function undoHisto(hid) {
 
 function toggleHisto() { showHisto = !showHisto; render(); }
 
-function payeGroups() {
-  const g = [];
-  store.dettes.forEach(c => c.items.forEach(i => {
-    if (i.payeGroup && !g.includes(i.payeGroup)) g.push(i.payeGroup);
-  }));
-  return g;
+let addingDateIn = null;
+
+function startAddDate(catId) { addingDateIn = catId; addingIn = null; editingItem = null; render();
+  const el = document.getElementById("inp-date-" + catId);
+  if (el) el.focus();
 }
 
-function setPayeGroupByIdx(catId, itemId, idx) {
-  const it = store.dettes.find(c => c.id === catId).items.find(i => i.id === itemId);
-  const g = payeGroups()[idx];
-  it.payeGroup = (it.payeGroup === g) ? null : g;
+function submitAddDate(catId) {
+  const label = document.getElementById("inp-date-" + catId).value.trim();
+  if (!label) return;
+  store.dettes.find(c => c.id === catId).items.push({ id: uid(), header: true, label });
+  addingDateIn = null;
   save(); render();
 }
 
-function newPayeGroup(catId, itemId) {
-  const inp = document.getElementById("paye-new-" + itemId);
-  const name = inp && inp.value.trim();
-  if (!name) return;
-  const it = store.dettes.find(c => c.id === catId).items.find(i => i.id === itemId);
-  it.payeGroup = name;
+function saveHeader(catId, itemId) {
+  const label = document.getElementById("edit-label-" + itemId).value.trim();
+  if (!label) return;
+  store.dettes.find(c => c.id === catId).items.find(i => i.id === itemId).label = label;
+  editingItem = null;
   save(); render();
 }
 
-function dissolvePayeByIdx(idx) {
-  const g = payeGroups()[idx];
-  if (!g) return;
-  if (!confirm("Terminer « " + g + " » ? Les items restent dans leurs catégories, seule l\'étiquette de paye est retirée.")) return;
-  store.dettes.forEach(c => c.items.forEach(i => { if (i.payeGroup === g) i.payeGroup = null; }));
-  save(); render();
+// ----- Glisser-déposer (onglet Dettes) -----
+let drag = null;
+
+function dragStart(ev, catId, itemId) {
+  ev.preventDefault();
+  const row = ev.target.closest("[data-rowid]");
+  drag = { catId, itemId, beforeId: undefined };
+  if (row) row.classList.add("dragging");
+  document.addEventListener("pointermove", dragMove);
+  document.addEventListener("pointerup", dragEnd);
+  document.addEventListener("pointercancel", dragEnd);
 }
 
-function payeSummaryCard() {
-  const groups = payeGroups();
-  if (!groups.length) return "";
-  const rows = groups.map((g, gi) => {
-    let tot = 0, n = 0;
-    store.dettes.forEach(c => c.items.forEach(i => {
-      if (i.payeGroup === g && !i.paid) { tot += i.amount; n++; }
-    }));
-    return '<div class="histo-row">' +
-      '<div class="histo-main">' +
-        '<div class="histo-label">' + esc(g) + '</div>' +
-        '<div class="histo-detail">' + n + ' item' + (n > 1 ? 's' : '') + ' à payer</div>' +
-      '</div>' +
-      '<span class="row-amount" style="border:none;cursor:default">' + fmt(tot) + '</span>' +
-      '<button class="trash" title="Terminer cette paye" onclick="dissolvePayeByIdx(' + gi + ')">✕</button>' +
-    '</div>';
-  }).join("");
-  return '<section class="card"><div class="cat-bar" style="background:#E3A72F"></div>' +
-    '<div class="cat-head"><div class="cat-name">📅 Prochaines payes</div></div>' + rows + '</section>';
+function dragMove(ev) {
+  if (!drag) return;
+  const rows = Array.from(document.querySelectorAll('[data-cat="' + drag.catId + '"] [data-rowid]'));
+  rows.forEach(r => r.classList.remove("drop-above", "drop-end"));
+  drag.beforeId = null;
+  let last = null;
+  for (const r of rows) {
+    if (r.getAttribute("data-rowid") === drag.itemId) continue;
+    const rect = r.getBoundingClientRect();
+    last = r;
+    if (ev.clientY < rect.top + rect.height / 2) {
+      r.classList.add("drop-above");
+      drag.beforeId = r.getAttribute("data-rowid");
+      return;
+    }
+  }
+  if (last) last.classList.add("drop-end");
+}
+
+function dragEnd() {
+  document.removeEventListener("pointermove", dragMove);
+  document.removeEventListener("pointerup", dragEnd);
+  document.removeEventListener("pointercancel", dragEnd);
+  if (!drag) return;
+  const d = drag; drag = null;
+  if (d.beforeId === undefined) { render(); return; }
+  const items = store.dettes.find(c => c.id === d.catId).items;
+  const from = items.findIndex(i => i.id === d.itemId);
+  if (from < 0) { render(); return; }
+  const [moved] = items.splice(from, 1);
+  const to = d.beforeId === null ? items.length : items.findIndex(i => i.id === d.beforeId);
+  items.splice(to < 0 ? items.length : to, 0, moved);
+  save(); render();
 }
 
 function exportBackup() {
@@ -398,6 +418,7 @@ function resetPerson(catId) {
 
 function toggleShowPaid() { showPaid = !showPaid; render(); }
 
+const gripSvg = '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><circle cx="9" cy="5" r="1.7"/><circle cx="15" cy="5" r="1.7"/><circle cx="9" cy="12" r="1.7"/><circle cx="15" cy="12" r="1.7"/><circle cx="9" cy="19" r="1.7"/><circle cx="15" cy="19" r="1.7"/></svg>';
 const trashSvg = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 6h18M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2m3 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M10 11v6M14 11v6"/></svg>';
 
 function render() {
@@ -408,8 +429,8 @@ function render() {
   const sub = document.getElementById("subLine");
 
   if (tab === "dettes") {
-    const totalDue = store.dettes.reduce((s,c) => s + c.items.filter(i=>!i.paid).reduce((t,i)=>t+i.amount,0), 0);
-    const totalPaid = store.dettes.reduce((s,c) => s + c.items.filter(i=>i.paid).reduce((t,i)=>t+i.amount,0), 0);
+    const totalDue = store.dettes.reduce((s,c) => s + c.items.filter(i=>!i.header && !i.paid).reduce((t,i)=>t+i.amount,0), 0);
+    const totalPaid = store.dettes.reduce((s,c) => s + c.items.filter(i=>!i.header && i.paid).reduce((t,i)=>t+i.amount,0), 0);
     big.textContent = fmt(totalDue);
     sub.textContent = "reste à payer" + (totalPaid > 0 ? " · " + fmt(totalPaid) + " remboursé" : "");
     toggleBtn.style.display = "";
@@ -431,8 +452,7 @@ function render() {
   if (showHisto) {
     document.getElementById("content").innerHTML = histoPanel();
   } else {
-    document.getElementById("content").innerHTML =
-      (tab === "dettes" ? payeSummaryCard() : "") + data().map(cat => catCard(cat)).join("");
+    document.getElementById("content").innerHTML = data().map(cat => catCard(cat)).join("");
   }
 }
 
@@ -475,13 +495,24 @@ function histoPanel() {
 
 function catCard(cat) {
   const isPaye = tab === "paye";
-  const due = cat.items.filter(i=>!i.paid).reduce((t,i)=>t+i.amount,0);
-  const total = cat.items.reduce((t,i)=>t+i.amount,0);
-  const doneCount = cat.items.filter(i=>i.paid).length;
-  const visible = (isPaye || tab === "epargne" || showPaid) ? cat.items : cat.items.filter(i=>!i.paid);
+  const due = cat.items.filter(i=>!i.header && !i.paid).reduce((t,i)=>t+i.amount,0);
+  const total = cat.items.filter(i=>!i.header).reduce((t,i)=>t+i.amount,0);
+  const doneCount = cat.items.filter(i=>!i.header && i.paid).length;
+  const visible = (isPaye || tab === "epargne" || showPaid) ? cat.items : cat.items.filter(i=>i.header || !i.paid);
   const subLabel = tab === "epargne" ? "− Retirer" : "− Payer";
   const addLabel = tab === "epargne" ? "+ Déposer" : "+ Ajouter au solde";
-  return `<section class="card">
+  const isDettes = tab === "dettes";
+  const headerSub = (startId) => {
+    let s = 0, started = false;
+    for (const i of cat.items) {
+      if (i.id === startId) { started = true; continue; }
+      if (!started) continue;
+      if (i.header) break;
+      if (!i.paid) s += i.amount;
+    }
+    return s;
+  };
+  return `<section class="card" data-cat="${cat.id}">
     <div class="cat-bar" style="background:${cat.color}"></div>
     <div class="cat-head">
       <div class="cat-name">${esc(cat.name)}${cat.note ? `<span class="cat-note"> — ${esc(cat.note)}</span>` : ""}</div>
@@ -493,22 +524,24 @@ function catCard(cat) {
       </div>
     </div>
     ${visible.length === 0 ? '<div class="empty">Rien ici 🎉</div>' : ""}
-    ${(tab === "dettes" ? (() => {
-      const groups = [];
-      visible.forEach(i => { if (i.payeGroup && !groups.includes(i.payeGroup)) groups.push(i.payeGroup); });
-      const entries = [];
-      groups.forEach(g => {
-        const its = visible.filter(i => i.payeGroup === g);
-        const sub = its.filter(i => !i.paid).reduce((t, i) => t + i.amount, 0);
-        entries.push({ h: g, sub });
-        its.forEach(i => entries.push({ it: i }));
-      });
-      visible.filter(i => !i.payeGroup).forEach(i => entries.push({ it: i }));
-      return entries;
-    })() : visible.map(i => ({ it: i }))).map(entry => entry.h !== undefined
-      ? `<div class="group-head"><span class="group-name">📅 ${esc(entry.h)}</span><span class="group-sub">${fmt(entry.sub)}</span></div>`
-      : (item => `
-      <div class="row">
+    ${visible.map(item => item.header ? `
+      <div class="header-row" data-rowid="${item.id}">
+        <span class="drag-handle" onpointerdown="dragStart(event,'${cat.id}','${item.id}')">${gripSvg}</span>
+        <span class="header-name" onclick="startEdit('${cat.id}','${item.id}')">📅 ${esc(item.label)}</span>
+        <span class="header-sub">${fmt(headerSub(item.id))}</span>
+        <button class="trash" onclick="deleteItem('${cat.id}','${item.id}')">${trashSvg}</button>
+      </div>
+      ${editingItem === cat.id + "|" + item.id ? `
+      <div class="edit-panel">
+        <div class="edit-line">
+          <input id="edit-label-${item.id}" style="flex:1" value="${esc(item.label)}" onkeydown="if(event.key==='Enter')saveHeader('${cat.id}','${item.id}')">
+          <button class="mini-btn btn-save" onclick="saveHeader('${cat.id}','${item.id}')">Enregistrer</button>
+          <button class="mini-btn btn-cancel" onclick="cancelEdit()">✕</button>
+        </div>
+        <div class="edit-line"><span class="edit-hint">Glisse les items sous cette date avec la poignée ⠿. La poubelle enlève la date seulement, pas les items.</span></div>
+      </div>` : ""}` : `
+      <div class="row" data-rowid="${item.id}">
+        ${isDettes ? `<span class="drag-handle" onpointerdown="dragStart(event,'${cat.id}','${item.id}')">${gripSvg}</span>` : ""}
         <button class="check ${item.paid ? "paid" : ""}" onclick="togglePaid('${cat.id}','${item.id}')">${item.paid ? "✓" : ""}</button>
         <span class="row-label ${item.paid ? "paid-text" : ""}" onclick="startEdit('${cat.id}','${item.id}')">${esc(item.label)}</span>
         <span class="row-amount ${item.paid ? "paid-text" : ""}" onclick="startEdit('${cat.id}','${item.id}')">${fmt(item.amount)}</span>
@@ -530,17 +563,8 @@ function catCard(cat) {
           <button class="mini-btn btn-move" onclick="moveItem('${cat.id}','${item.id}',1)">↓ Descendre</button>
           <button class="mini-btn btn-cancel" onclick="cancelEdit()">✕</button>
         </div>
-        ${tab === "dettes" ? `
-        <div class="edit-line" style="align-items:center">
-          <span class="edit-hint" style="width:auto">Payer à :</span>
-          ${payeGroups().map((g, gi) => `<button class="chip ${item.payeGroup === g ? "chip-on" : ""}" onclick="setPayeGroupByIdx('${cat.id}','${item.id}',${gi})">${esc(g)}</button>`).join("")}
-        </div>
-        <div class="edit-line">
-          <input id="paye-new-${item.id}" style="flex:1" placeholder="Nouvelle paye (ex. Paye du 20 nov)" onkeydown="if(event.key==='Enter')newPayeGroup('${cat.id}','${item.id}')">
-          <button class="mini-btn btn-set" onclick="newPayeGroup('${cat.id}','${item.id}')">OK</button>
-        </div>` : ""}
-        <div class="edit-line"><span class="edit-hint">Entre un montant puis « ${subLabel} » / « ${addLabel} » pour ajuster le solde, ou « Enregistrer » pour remplacer le texte et le montant.${tab === "dettes" ? " Touche une étiquette de paye pour assigner ou retirer l'item." : ""}</span></div>
-      </div>` : ""}`)(entry.it)).join("")}
+        <div class="edit-line"><span class="edit-hint">Entre un montant puis « ${subLabel} » / « ${addLabel} » pour ajuster le solde, ou « Enregistrer » pour remplacer le texte et le montant.</span></div>
+      </div>` : ""}`).join("")}
     ${addingIn === cat.id
       ? `<div class="add-form">
            <input class="inp-label" id="inp-label-${cat.id}" placeholder="Description">
@@ -548,6 +572,12 @@ function catCard(cat) {
            <button class="add-btn" style="background:${cat.color}" onclick="submitAdd('${cat.id}')">OK</button>
          </div>`
       : `<button class="add-row" onclick="startAdd('${cat.id}')">+ Ajouter</button>`}
+    ${isDettes ? (addingDateIn === cat.id
+      ? `<div class="add-form" style="border-top:none;padding-top:2px">
+           <input class="inp-label" id="inp-date-${cat.id}" placeholder="Paye du … (ex. 20 nov)" onkeydown="if(event.key==='Enter')submitAddDate('${cat.id}')">
+           <button class="add-btn" style="background:#E3A72F" onclick="submitAddDate('${cat.id}')">OK</button>
+         </div>`
+      : `<button class="add-row" style="border-top:none;padding-top:2px;color:#5B6675" onclick="startAddDate('${cat.id}')">📅 + Ajouter une paye</button>`) : ""}
     ${isPaye ? `<button class="add-row" style="border-top:none;padding-top:2px;color:#5B6675" onclick="resetPerson('${cat.id}')">↺ Nouvelle paye (tout décocher)</button>` : ""}
   </section>`;
 }
